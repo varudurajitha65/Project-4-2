@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartCare Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; }
+        header { background: #1b5e20; color: white; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { margin: 0; font-size: 24px; }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .logout-btn { background: #c62828; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px; font-size: 14px; font-weight: bold; }
+        .logout-btn:hover { background: #b71c1c; }
+        .container { padding: 30px 40px; max-width: 1200px; margin: auto; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card-stat { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2e7d32; }
+        .card-stat h3 { margin: 0; color: #666; font-size: 14px; text-transform: uppercase; }
+        .card-stat p { margin: 10px 0 0 0; font-size: 28px; font-weight: bold; color: #2e7d32; }
+        .modules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 25px; }
+        .module-card { background: white; border-radius: 10px; padding: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
+        .module-card h2 { margin-top: 0; color: #1b5e20; font-size: 20px; border-bottom: 2px solid #e8f5e9; padding-bottom: 10px; }
+        label { font-weight: 600; margin-top: 15px; display: block; color: #333; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 12px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; background: #2e7d32; color: white; border: none; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #1b5e20; }
+        .badge { background: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; margin-top: 5px; }
+        footer { margin-top: 40px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 3px solid #2e7d32; }
+        footer p { margin: 0; font-size: 13px; color: #555; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>SmartCare: Affordable Medicine & Diet System</h1>
+    <div class="user-info">
+        <span>Welcome, <strong>{{ username.capitalize() }}</strong>[cite: 2]</span>
+        <a href="/logout" class="logout-btn">Logout</a>
+    </div>
+</header>
+
+<div class="container">
+    <div class="stats-grid">
+        <div class="card-stat">
+            <h3>Affordable Medicines</h3>
+            <p>{{ total_meds }}+ Variants[cite: 2]</p>
+        </div>
+        <div class="card-stat">
+            <h3>Diet Profiles</h3>
+            <p>{{ total_diets }} Categories[cite: 2]</p>
+        </div>
+        <div class="card-stat">
+            <h3>Image Scanner</h3>
+            <p>Active</p>
+        </div>
+    </div>
+
+    <div class="modules-grid">
+        <!-- Module 1: Medicine Search -->
+        <div class="module-card">
+            <h2>1. Search Affordable Medicine</h2>
+            <p>Find generic alternatives for branded medicines to save cost.</p>
+            <form action="/search_medicine" method="POST">
+                <label for="medicine_query">Enter Medicine Name:</label>
+                <input type="text" id="medicine_query" name="medicine_query" placeholder="e.g., paracetamol, omeprazole" required>
+                <button type="submit">Search Generic Alternative</button>
+            </form>
+            <span class="badge">Popular: Paracetamol, Metformin, Omeprazole</span>
+        </div>
+
+        <!-- Module 2: Diet Search -->
+        <div class="module-card">
+            <h2>2. Personalized Diet Search</h2>
+            <p>Search any health condition or disease to get customized diet plans.</p>
+            <form action="/search_diet" method="POST">
+                <label for="diet_query">Search Disease / Health Goal:</label>
+                <input type="text" id="diet_query" name="diet_query" placeholder="e.g., diabetes, weight_loss, thyroid, bp" required>
+                <button type="submit">Get Diet Recommendations</button>
+            </form>
+            <span class="badge">Popular: Diabetes, Weight Loss, Hypertension</span>
+        </div>
+
+        <!-- Module 3: Image Prescription Scan -->
+        <div class="module-card">
+            <h2>3. Scan Prescription Image</h2>
+            <p>Upload prescription or medicine image to extract details automatically.</p>
+            <form action="/scan_prescription" method="POST" enctype="multipart/form-data">
+                <label for="prescription_image">Upload Prescription Photo:</label>
+                <input type="file" id="prescription_image" name="prescription_image" accept="image/*" required>
+                <button type="submit">Scan & Analyze Image</button>
+            </form>
+            <span class="badge">Supports: JPG, PNG, Medical Receipts</span>
+        </div>
+    </div>
+
+    <footer>
+        <p><strong>Important Note:</strong> SmartCare is designed as an informational system to promote affordable generic medicines and healthy diet choices. All suggested medicine alternatives and diet recommendations should be verified by a registered medical doctor or certified dietitian before implementation.</p>
+    </footer>
+</div>
+
+</body>
+</html>
