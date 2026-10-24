@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prescription Image Scan Result</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; padding: 40px; }
+        .container { max-width: 700px; background: white; padding: 30px; border-radius: 10px; margin: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { color: #1b5e20; border-bottom: 2px solid #e8f5e9; padding-bottom: 10px; }
+        .ocr-box { background: #f0f4f8; border-left: 5px solid #0288d1; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+        .med-card { background: #e8f5e9; border: 1px solid #c8e6c9; padding: 15px; margin: 10px 0; border-radius: 6px; }
+        .btn { display: inline-block; background: #2e7d32; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 15px; }
+        .note { font-size: 12px; color: #666; margin-top: 25px; border-top: 1px solid #ddd; padding-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Prescription Scan & Analysis</h2>
+    <p><strong>Uploaded File:</strong> {{ filename }}</p>
+    
+    <div class="ocr-box">
+        <h4>Extracted Medicine Names (via OCR Scan Simulation):</h4>
+        <p><em>"{{ extracted_text }}"</em></p>
+    </div>
+
+    <h3>Extracted Generic Alternatives:</h3>
+    {% for med in scanned_meds %}
+        <div class="med-card">
+            <p><strong>Branded:</strong> {{ med.brand_name }}</p>
+            <p><strong>Generic Alternative:</strong> <span style="color:#2e7d32; font-weight:bold;">{{ med.generic_name }}</span></p>
+            <p><strong>Estimated Cost:</strong> {{ med.generic_price }}</p>
+        </div>
+    {% endfor %}
+
+    <a href="/" class="btn">&larr; Back to Dashboard</a>
+
+    <!-- English Note at the bottom -->
+    <div class="note">
+        <strong>Note:</strong> Prescription scan results are processed via OCR simulation. Always cross-check with your physical doctor's prescription before purchase.
+    </div>
+</div>
+</body>
+</html>
