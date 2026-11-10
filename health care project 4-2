@@ -1,0 +1,230 @@
+import json
+import os
+import re
+from datetime import timedelta
+from flask import Flask, render_template, request, redirect, url_for, session
+from werkzeug.security import check_password_hash, generate_password_hash
+
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'smartcare_dev_secret_key_change_me')
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+app.permanent_session_lifetime = timedelta(days=30)
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    return {"status": "error", "message": "Image must be 10 MB or smaller."}, 413
+
+# --- BACKEND DATABASES & ROUTES ---
+DEFAULT_USERS = {
+    "admin": "admin123",
+    "user": "user123"
+}
+USERS_FILE = os.path.join(app.instance_path, 'users.json')
+
+def save_users(users):
+    os.makedirs(app.instance_path, exist_ok=True)
+    temporary_file = f'{USERS_FILE}.tmp'
+    with open(temporary_file, 'w', encoding='utf-8') as user_file:
+        json.dump(users, user_file)
+    os.replace(temporary_file, USERS_FILE)
+
+def load_users():
+    try:
+        with open(USERS_FILE, encoding='utf-8') as user_file:
+            saved_users = json.load(user_file)
+    except FileNotFoundError:
+        saved_users = {}
+
+    if not isinstance(saved_users, dict):
+        raise ValueError('Stored user data must be a JSON object.')
+
+    users = {}
+    for username, password in saved_users.items():
+        if not isinstance(username, str) or not isinstance(password, str):
+            continue
+        if password.startswith(('scrypt:', 'pbkdf2:')):
+            users[username] = password
+        else:
+            users[username] = generate_password_hash(password)
+
+    for username, password in DEFAULT_USERS.items():
+        users.setdefault(username, generate_password_hash(password))
+
+    save_users(users)
+    return users
+
+USERS = load_users()
+
+MEDICINE_DB = [
+    {"brand_name": "Amoxil / Mox", "brand_price": "₹110 / 10 caps", "generic_name": "Amoxicillin IP", "generic_price": "₹35 / 10 caps", "dosage": "500mg - Thrice daily"},
+    {"brand_name": "Lipitor", "brand_price": "₹210 / 15 tabs", "generic_name": "Atorvastatin IP", "generic_price": "₹45 / 15 tabs", "dosage": "10mg - Once daily at bedtime"},
+    {"brand_name": "Glucophage", "brand_price": "₹120 / 20 tabs", "generic_name": "Metformin Hydrochloride", "generic_price": "₹25 / 20 tabs", "dosage": "500mg - Twice daily with meals"},
+    {"brand_name": "Prilosec / Omez", "brand_price": "₹110 / 15 caps", "generic_name": "Omeprazole Capsules IP", "generic_price": "₹35 / 15 caps", "dosage": "20mg - Before breakfast"},
+    {"brand_name": "Crocin / Calpol", "brand_price": "₹30 / 15 tabs", "generic_name": "Paracetamol IP", "generic_price": "₹10 / 15 tabs", "dosage": "500mg - As directed"},
+    {"brand_name": "Pantocid", "brand_price": "₹140 / 15 tabs", "generic_name": "Pantoprazole Sodium", "generic_price": "₹40 / 15 tabs", "dosage": "40mg - Before breakfast"},
+    {"brand_name": "Wysolone", "brand_price": "₹45 / 10 tabs", "generic_name": "Prednisolone IP", "generic_price": "₹12 / 10 tabs", "dosage": "5mg - As directed"},
+    {"brand_name": "Inderal", "brand_price": "₹80 / 15 tabs", "generic_name": "Propranolol Hydrochloride", "generic_price": "₹20 / 15 tabs", "dosage": "40mg - Twice daily"}
+]
+
+MEDICINE_DB.extend(
+    {
+        "generic_name": generic_name,
+        "brand_name": brand_name,
+        "search_terms": search_terms,
+        "generic_price": "Price not listed",
+        "brand_price": "Price not listed",
+        "dosage": ""
+    }
+    for generic_name, brand_name, search_terms in [
+        ("Ibuprofen IP", "Brufen", ["Advil", "Nurofen"]),
+        ("Diclofenac Sodium IP", "Voveran", ["Voltaren"]),
+        ("Cetirizine Hydrochloride IP", "Cetzine / Okacet", ["Zyrtec", "Cetrizine"]),
+        ("Levocetirizine Dihydrochloride IP", "Levocet / Xyzal", ["Levoset"]),
+        ("Azithromycin IP", "Azithral / Azee", ["Zithromax"]),
+        ("Cefixime IP", "Taxim-O / Suprax", ["Cefix"]),
+        ("Ciprofloxacin IP", "Ciplox / Cifran", ["Cipro"]),
+        ("Metronidazole IP", "Flagyl", ["Metrogyl"]),
+        ("Rabeprazole Sodium IP", "Rablet / Razo", ["Rabicip"]),
+        ("Esomeprazole IP", "Nexpro", ["Nexium"]),
+        ("Famotidine IP", "Famocid", ["Pepcid"]),
+        ("Glimepiride IP", "Amaryl", []),
+        ("Sitagliptin IP", "Januvia", []),
+        ("Amlodipine Besylate IP", "Amlong / Norvasc", []),
+        ("Losartan Potassium IP", "Losar / Cozaar", []),
+        ("Telmisartan IP", "Telma / Micardis", []),
+        ("Rosuvastatin IP", "Rosuvas / Crestor", []),
+        ("Aspirin IP", "Ecosprin / Disprin", []),
+        ("Clopidogrel IP", "Clopilet / Plavix", []),
+        ("Montelukast Sodium IP", "Montair / Singulair", []),
+        ("Salbutamol IP", "Asthalin / Ventolin", ["Albuterol"]),
+        ("Ondansetron IP", "Emeset / Ondem", ["Zofran"]),
+        ("Domperidone IP", "Domstal / Motilium", []),
+        ("Fluconazole IP", "Forcan / Diflucan", []),
+        ("Loperamide IP", "Imodium", []),
+        ("Furosemide IP", "Lasix", []),
+        ("Hydrochlorothiazide IP", "Aquazide", ["HCTZ"]),
+        ("Albendazole IP", "Zentel", []),
+        ("Levothyroxine Sodium IP", "Thyronorm / Eltroxin", ["Levothyroxine"]),
+        ("Sertraline Hydrochloride IP", "Serlift / Zosert", ["Sertraline"]),
+        ("Escitalopram Oxalate IP", "Nexito / Cipralex", ["Escitalopram"]),
+        ("Ascorbic Acid IP", "Limcee", ["Vitamin C"]),
+        ("Cholecalciferol IP", "D-Rise", ["Vitamin D3", "Vitamin D"])
+    ]
+)
+
+DIET_DB = {
+    "diabetes": {
+        "category": "Diabetes Management Plan",
+        "foods_to_eat": "Leafy greens, whole grains, nuts, seeds, fatty fish, and fiber-rich vegetables.",
+        "foods_to_avoid": "Sugary drinks, white bread, processed snacks, sweets, and high-carb refined foods.",
+        "tip": "Maintain consistent meal timings and monitor your blood glucose levels regularly."
+    },
+    "weight_loss": {
+        "category": "Weight Loss & Metabolism Plan",
+        "foods_to_eat": "Lean proteins (chicken, tofu, lentils), fresh vegetables, green tea, and complex carbs.",
+        "foods_to_avoid": "Fried items, fast food, sugary beverages, pastries, and excessive dairy fats.",
+        "tip": "Stay well-hydrated throughout the day and combine your diet with regular physical cardio."
+    },
+    "hypertension": {
+        "category": "Hypertension (High BP) Control Plan",
+        "foods_to_eat": "Bananas, spinach, oats, garlic, beets, and foods rich in Potassium and Magnesium.",
+        "foods_to_avoid": "High-sodium processed foods, canned soups, pickles, salted snacks, and excess caffeine.",
+        "tip": "Reduce table salt usage and engage in stress-reducing practices like deep breathing or yoga."
+    }
+}
+
+@app.route('/')
+def index():
+    return render_template('index.html', medicine_catalog=MEDICINE_DB)
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.get_json(silent=True) or {}
+    username = data.get('username', '').strip() if isinstance(data.get('username'), str) else ''
+    password = data.get('password')
+    stored_password = USERS.get(username)
+    if stored_password and isinstance(password, str) and check_password_hash(stored_password, password):
+        session['username'] = username
+        session.permanent = data.get('remember_me') is True
+        return {"status": "success", "username": username}
+    return {"status": "error", "message": "Invalid username or password"}, 401
+
+@app.route('/api/register', methods=['POST'])
+def api_register():
+    data = request.get_json(silent=True) or {}
+    username = data.get('username', '').strip() if isinstance(data.get('username'), str) else ''
+    password = data.get('password')
+
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{3,30}', username):
+        return {"status": "error", "message": "Username must be 3-30 characters using letters, numbers, dots, underscores, or hyphens."}, 400
+    if not isinstance(password, str) or len(password) < 6:
+        return {"status": "error", "message": "Password must be at least 6 characters."}, 400
+    if username in USERS:
+        return {"status": "error", "message": "That username is already taken."}, 409
+
+    USERS[username] = generate_password_hash(password)
+    try:
+        save_users(USERS)
+    except OSError:
+        USERS.pop(username, None)
+        return {"status": "error", "message": "Could not save your account. Please try again."}, 500
+    session['username'] = username
+    return {"status": "success", "username": username}, 201
+
+@app.route('/api/logout')
+def api_logout():
+    session.pop('username', None)
+    session.permanent = False
+    return {"status": "success"}
+
+@app.route('/api/medicines', methods=['GET'])
+def get_medicines():
+    letter = request.args.get('letter', '').upper()
+    query = request.args.get('q', '').strip().casefold()
+    
+    filtered = MEDICINE_DB
+    if letter:
+        filtered = [m for m in filtered if m['generic_name'].upper().startswith(letter) or m['brand_name'].upper().startswith(letter)]
+    if query:
+        filtered = [
+            m for m in filtered
+            if any(query in value.casefold() for value in (m['generic_name'], m['brand_name'], *m.get('search_terms', [])))
+        ]
+        
+    return {"status": "success", "data": filtered}
+
+@app.route('/api/diet', methods=['GET'])
+def get_diet():
+    query = request.args.get('q', '').strip().lower()
+    matched_key = next((k for k in DIET_DB if k in query), None)
+    
+    diet_data = DIET_DB.get(matched_key, {
+        "category": f"Custom Guidelines for: {query.title() if query else 'General Health'}",
+        "foods_to_eat": "Balanced portions of fresh fruits, vegetables, clean proteins, and whole grains.",
+        "foods_to_avoid": "Ultra-processed foods, artificial sweeteners, excessive oils, and refined sugars.",
+        "tip": "Ensure adequate daily water intake and consult a specialist for structured guidance."
+    })
+    return {"status": "success", "data": diet_data}
+
+@app.route('/api/scan_prescription', methods=['POST'])
+def scan_prescription():
+    prescription = request.files.get('prescription')
+    if prescription is None or not prescription.filename:
+        return {"status": "error", "message": "Please upload a prescription image."}, 400
+    if not prescription.mimetype.startswith('image/'):
+        return {"status": "error", "message": "Please upload a valid image file."}, 400
+
+    # Simulated OCR extraction
+    scanned_meds = [m for m in MEDICINE_DB if m['generic_name'].startswith('Paracetamol') or m['generic_name'].startswith('Omeprazole')]
+    return {
+        "status": "success",
+        "extracted_text": "Rx: Paracetamol 500mg, Omeprazole 20mg - 1 tablet daily before breakfast",
+        "scanned_meds": scanned_meds
+    }
+
+if __name__ == '__main__':
+    app.run(
+        debug=os.environ.get('FLASK_DEBUG', '').lower() == '1',
+        host='127.0.0.1',
+        port=int(os.environ.get('PORT', '5000'))
+    )
